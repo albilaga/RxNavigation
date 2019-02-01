@@ -56,26 +56,25 @@ namespace RxNavigation
 
     public sealed class ViewStackService : IViewStackService, IEnableLogger
     {
-        private readonly IView view;
-        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> modalPageStack;
-        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> defaultNavigationStack;
-        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> nullPageStack;
+        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> _ModalPageStack;
+        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> _DefaultNavigationStack;
+        private readonly BehaviorSubject<IImmutableList<IPageViewModel>> _NullPageStack;
 
-        private BehaviorSubject<IImmutableList<IPageViewModel>> currentPageStack;
-        private readonly bool isAndroid;
+        private BehaviorSubject<IImmutableList<IPageViewModel>> _CurrentPageStack;
+        private readonly bool _IsAndroid;
 
         public ViewStackService(IView view, bool isAndroid)
         {
-            this.isAndroid = isAndroid;
-            this.view = view ?? throw new NullReferenceException("The view can't be null.");
+            this._IsAndroid = isAndroid;
+            this.View = view ?? throw new NullReferenceException("The view can't be null.");
 
-            this.modalPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
-            this.defaultNavigationStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
-            this.nullPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(null);
-            this.currentPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
+            this._ModalPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
+            this._DefaultNavigationStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
+            this._NullPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(null);
+            this._CurrentPageStack = new BehaviorSubject<IImmutableList<IPageViewModel>>(ImmutableList<IPageViewModel>.Empty);
 
             this
-                .modalPageStack
+                ._ModalPageStack
                     .Select(
                         x =>
                         {
@@ -87,23 +86,23 @@ namespace RxNavigation
                                 }
                                 else
                                 {
-                                    return nullPageStack;
+                                    return _NullPageStack;
                                 }
                             }
                             else
                             {
-                                return this.defaultNavigationStack;
+                                return this._DefaultNavigationStack;
                             }
                         })
-                    .Subscribe(x => this.currentPageStack = x);
+                    .Subscribe(x => _CurrentPageStack = x);
 
             this
-                .view
+                .View
                 .PagePopped
                 .Do(
                     pageVm =>
                     {
-                        var stack = this.currentPageStack.Value;
+                        var stack = _CurrentPageStack.Value;
 
                         if (stack.Count == 0)
                         {
@@ -115,42 +114,42 @@ namespace RxNavigation
                         {
                             return;
                         }
-                        var removedPage = PopStackAndTick(this.currentPageStack);
+                        var removedPage = PopStackAndTick(_CurrentPageStack);
                         this.Log().Debug("Removed page '{0}' from stack.", removedPage.Title);
                     })
                 .Subscribe();
 
             this
-                .view
+                .View
                 .ModalPopped
                 .Do(
                     _ =>
                     {
-                        var removedPage = PopStackAndTick(this.modalPageStack);
+                        var removedPage = PopStackAndTick(_ModalPageStack);
                         this.Log().Debug("Removed modal page '{0}' from stack.", removedPage.Title);
                     })
                 .Subscribe();
         }
 
-        public IView View => this.view;
+        public IView View { get; }
 
-        public IObservable<IImmutableList<IPageViewModel>> PageStack => this.currentPageStack;
+        public IObservable<IImmutableList<IPageViewModel>> PageStack => _CurrentPageStack;
 
-        public IObservable<IImmutableList<IPageViewModel>> ModalStack => this.modalPageStack;
+        public IObservable<IImmutableList<IPageViewModel>> ModalStack => _ModalPageStack;
 
         public IObservable<Unit> PushPage(IPageViewModel page, string contract = null, bool resetStack = false, bool animate = true)
         {
-            if (this.currentPageStack.Value == null)
+            if (this._CurrentPageStack.Value == null)
             {
                 throw new InvalidOperationException("Can't push a page onto a modal with no navigation stack.");
             }
-            return this
-                .view
+            return
+                View
                 .PushPage(page, contract, resetStack, animate)
                 .Do(
                     _ =>
                     {
-                        AddToStackAndTick(this.currentPageStack, page, resetStack);
+                        AddToStackAndTick(this._CurrentPageStack, page, resetStack);
                         this.Log().Debug("Added page '{0}' (contract '{1}') to stack.", page.Title, contract);
                     });
         }
@@ -162,7 +161,7 @@ namespace RxNavigation
                 throw new NullReferenceException("The page you tried to insert is null.");
             }
 
-            var stack = this.currentPageStack.Value;
+            var stack = _CurrentPageStack.Value;
 
             if (stack == null)
             {
@@ -175,13 +174,13 @@ namespace RxNavigation
             }
 
             stack = stack.Insert(index, page);
-            this.currentPageStack.OnNext(stack);
-            this.view.InsertPage(index, page, contract);
+            _CurrentPageStack.OnNext(stack);
+            View.InsertPage(index, page, contract);
         }
 
         public IObservable<Unit> PopToPage(int index, bool animateLastPage = true)
         {
-            var stack = this.currentPageStack.Value;
+            var stack = _CurrentPageStack.Value;
 
             if (stack == null)
             {
@@ -201,20 +200,20 @@ namespace RxNavigation
 
         public IObservable<Unit> PopToRoot(bool animateLastPage = true)
         {
-            var stack = this.currentPageStack.Value;
+            var stack = _CurrentPageStack.Value;
 
             if (stack == null)
             {
                 throw new InvalidOperationException("Can't pop a page from a modal with no navigation stack.");
             }
 
-            int idxOfLastPage = stack.Count - 1;
+            var idxOfLastPage = stack.Count - 1;
             return PopPages(idxOfLastPage, animateLastPage);
         }
 
         public IObservable<Unit> PopPages(int count = 1, bool animateLastPage = true)
         {
-            var stack = this.currentPageStack.Value;
+            var stack = _CurrentPageStack.Value;
 
             if (stack == null)
             {
@@ -230,19 +229,19 @@ namespace RxNavigation
             if (count > 1)
             {
                 // Remove count - 1 pages (leaving the top page).
-                int idxOfSecondToLastPage = stack.Count - 2;
-                for (int i = idxOfSecondToLastPage; i >= stack.Count - count; --i)
+                var idxOfSecondToLastPage = stack.Count - 2;
+                for (var i = idxOfSecondToLastPage; i >= stack.Count - count; --i)
                 {
-                    this.view.RemovePage(i);
+                    View.RemovePage(i);
                 }
 
                 stack = stack.RemoveRange(stack.Count - count, count - 1);
-                this.currentPageStack.OnNext(stack);
+                _CurrentPageStack.OnNext(stack);
             }
 
             // Now remove the top page with optional animation.
-            return this
-                .view
+            return
+                View
                 .PopPage(animateLastPage);
         }
 
@@ -253,13 +252,13 @@ namespace RxNavigation
                 throw new NullReferenceException("The modal you tried to push is null.");
             }
 
-            return this
-                .view
+            return
+                View
                 .PushModal(modal, contract, false)
                 .Do(
                     _ =>
                     {
-                        AddToStackAndTick(this.modalPageStack, modal, false);
+                        AddToStackAndTick(_ModalPageStack, modal, false);
                         this.Log().Debug("Added modal '{0}' (contract '{1}') to stack.", modal.Title, contract);
                     });
         }
@@ -276,21 +275,21 @@ namespace RxNavigation
                 throw new InvalidOperationException("Can't push an empty navigation page.");
             }
 
-            return this
-                .view
+            return
+                View
                 .PushModal(modal.PageStack.Value[0], contract, true)
                 .Do(
                     _ =>
                     {
-                        AddToStackAndTick(this.modalPageStack, modal, false);
+                        AddToStackAndTick(_ModalPageStack, modal, false);
                         this.Log().Debug("Added modal '{0}' (contract '{1}') to stack.", modal.Title, contract);
                     });
         }
 
         public IObservable<Unit> PopModal()
         {
-            return this
-                .view
+            return
+                View
                 .PopModal();
         }
 
@@ -298,14 +297,7 @@ namespace RxNavigation
         {
             var stack = stackSubject.Value;
 
-            if (reset)
-            {
-                stack = new[] { item }.ToImmutableList();
-            }
-            else
-            {
-                stack = stack.Add(item);
-            }
+            stack = reset ? new[] { item }.ToImmutableList() : stack.Add(item);
 
             stackSubject.OnNext(stack);
         }
@@ -327,22 +319,22 @@ namespace RxNavigation
 
         public IObservable<Unit> PushAndDestroyLastPage(IPageViewModel page, bool animate = true)
         {
-            if (this.currentPageStack.Value == null)
+            if (_CurrentPageStack.Value == null)
             {
                 throw new InvalidOperationException("Can't push a page onto a modal with no navigation stack.");
             }
-            return this
-                .view
+            return
+                View
                 .PushAndDestroyLastPage(page, animate)
                 //.Take(1)
                 .Do(
                     _ =>
                     {
-                        if (isAndroid)
+                        if (_IsAndroid)
                         {
-                            PopStackAndTick(this.currentPageStack);
+                            PopStackAndTick(_CurrentPageStack);
                         }
-                        AddToStackAndTick(this.currentPageStack, page, false);
+                        AddToStackAndTick(_CurrentPageStack, page, false);
                         this.Log().Debug("Added page '{0}' (contract '{1}') to stack.", page.Title, null);
                     });
         }
